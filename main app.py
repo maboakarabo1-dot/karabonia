@@ -17,9 +17,11 @@ IMPORTANT: The explanations and checklists are a first draft written for learnin
 Check each one with your college or an official source, and rewrite it in your own
 words before you submit. Use fictional examples in your demo, never real private details.
 """
+import asyncio
 import json
 import os
 import random
+import urllib.request
 
 import flet as ft
 
@@ -40,6 +42,9 @@ RED = "#D64545"
 # ---------------------------------------------------------------------------
 # WELCOME SCREEN CONTENT: edit here later. Add a feature = add one line to WELCOME_POINTS.
 # ---------------------------------------------------------------------------
+GOODBYE_TEXT = "It has been a pleasure being part of your journey from study to work. Keep going, you are closer than you think."
+WELCOME_VALUE = ("It explains the jargon, finds what is stopping you, protects you from job scams and turns "
+                 "informal experience into proof. Free, and it works offline.")
 WELCOME_TITLE = "Welcome!"
 WELCOME_TAGLINE = "Your path from study to work starts here"
 WELCOME_POINTS = [
@@ -63,6 +68,7 @@ COUNTS_FILE = os.path.join(HERE, "search_counts.json")
 TRACKER_FILE = os.path.join(HERE, "tracker.json")
 PROFILE_FILE = os.path.join(HERE, "profile.json")
 WELCOME_IMG = os.path.join(HERE, "assets", "welcome.png")  # optional AI illustration
+FEEDBACK_FILE = os.path.join(HERE, "feedback.txt")  # anonymous feedback (no names)
 
 # ---------------------------------------------------------------------------
 # CHECKLISTS shown inside some term cards
@@ -538,19 +544,20 @@ READINESS = [
     ("I have a working email address and data to apply online.", "Create a professional email address and budget some data for applications."),
 ]
 
-STATUSES = ["Planned", "Contacted", "Follow up", "Replied", "Placed"]
+STATUSES = ["To contact", "Contacted", "Follow up due", "Replied", "Placed"]
+OLD_STATUS = {"Planned": "To contact", "Follow up": "Follow up due"}   # older saved files
 STATUS_COLOURS = {
-    "Planned": MINT,
+    "To contact": MINT,
     "Contacted": SAND,
-    "Follow up": "#F2C14E",
+    "Follow up due": "#F2C14E",
     "Replied": "#9AD1C9",
     "Placed": "#7BC47F",
 }
 
 DEMO_ENTRIES = [
     {"org": "Example Municipality HR (demo)", "contacted": "12 Oct", "follow_up": "19 Oct", "status": "Contacted"},
-    {"org": "Sample Primary School Office (demo)", "contacted": "14 Oct", "follow_up": "21 Oct", "status": "Follow up"},
-    {"org": "Demo Accounting Firm (demo)", "contacted": "", "follow_up": "", "status": "Planned"},
+    {"org": "Sample Primary School Office (demo)", "contacted": "14 Oct", "follow_up": "21 Oct", "status": "Follow up due"},
+    {"org": "Demo Accounting Firm (demo)", "contacted": "", "follow_up": "", "status": "To contact"},
 ]
 
 # ---------------------------------------------------------------------------
@@ -587,6 +594,34 @@ def scan_advert(text):
 
 
 # ---------------------------------------------------------------------------
+# USEFUL LINKS (official sites). Check each one opens before you submit.
+# ---------------------------------------------------------------------------
+RESOURCES = [
+    ("NSFAS", "Funding for study", "https://www.nsfas.org.za"),
+    ("SAYouth.mobi", "Free youth opportunities and learnerships", "https://sayouth.mobi"),
+    ("NYDA", "Youth and business support", "https://www.nyda.gov.za"),
+    ("SAQA", "Check or understand a qualification", "https://www.saqa.org.za"),
+    ("QCTO", "Occupational qualifications", "https://www.qcto.org.za"),
+    ("DHET", "Department of Higher Education and Training", "https://www.dhet.gov.za"),
+]
+RESOURCE_FOR = {   # term -> (button text, link)
+    "nsfas": ("NSFAS website", "https://www.nsfas.org.za"),
+    "saqa": ("SAQA website", "https://www.saqa.org.za"),
+    "nqf": ("SAQA website", "https://www.saqa.org.za"),
+    "qcto": ("QCTO website", "https://www.qcto.org.za"),
+    "occupational qualification": ("QCTO website", "https://www.qcto.org.za"),
+    "nated": ("DHET website", "https://www.dhet.gov.za"),
+    "national n diploma": ("DHET website", "https://www.dhet.gov.za"),
+    "learnership": ("Find opportunities on SAYouth.mobi", "https://sayouth.mobi"),
+    "internship": ("Find opportunities on SAYouth.mobi", "https://sayouth.mobi"),
+    "vacancy": ("Find opportunities on SAYouth.mobi", "https://sayouth.mobi"),
+    "entry-level job": ("Find opportunities on SAYouth.mobi", "https://sayouth.mobi"),
+    "funding": ("NYDA website", "https://www.nyda.gov.za"),
+    "entrepreneurship": ("NYDA website", "https://www.nyda.gov.za"),
+    "business idea": ("NYDA website", "https://www.nyda.gov.za"),
+}
+
+# ---------------------------------------------------------------------------
 # SKILLS PROFILE options
 # ---------------------------------------------------------------------------
 SKILL_OPTIONS = [
@@ -598,6 +633,71 @@ EXP_TYPES = [
     "Workplace training", "Volunteering", "Small business",
     "Community or church project", "School or study project",
 ]
+
+
+# ---------------------------------------------------------------------------
+# JARGON QUIZ: simple, practical questions. Each answer must be a key in TERMS.
+# ---------------------------------------------------------------------------
+QUIZ_ITEMS = [
+    ("The record of your workplace training that your supervisor signs and dates.", "logbook"),
+    ("The workplace experience you must finish to get your diploma.", "in-service training"),
+    ("A short document with your education, skills and experience that you send when you apply.", "cv"),
+    ("A short letter that says who you are and why you suit the job.", "cover letter"),
+    ("A job that does not ask for much work experience.", "entry-level job"),
+    ("Working without pay to help your community, and you can ask for a reference letter.", "volunteering"),
+    ("Government money that can help pay for your study.", "nsfas"),
+    ("A programme where you learn and work at a company at the same time.", "learnership"),
+    ("A person, like a lecturer or past supervisor, who can say you are reliable.", "reference"),
+    ("An official paper that lists your subjects and marks.", "statement of results"),
+    ("Contacting an employer again after you applied, to show you are interested.", "application follow-up"),
+    ("Learning new skills, like a short course, to improve your job chances.", "upskilling"),
+    ("The money left after you take your costs away from what you earned.", "profit"),
+    ("The people most likely to buy from you.", "target market"),
+    ("The older N1 to N6 college programmes that are being replaced.", "nated"),
+]
+
+# ---------------------------------------------------------------------------
+# OPTIONAL AI HELPER (Anthropic API). The key is read from an environment variable and
+# is NEVER written in this file or put on GitHub. With no key, the app still works offline.
+# ---------------------------------------------------------------------------
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_MODEL = "claude-haiku-5-5"
+AI_SYSTEM = (
+    "You are Karabonia, a friendly guide for young South Africans moving from study to work "
+    "(TVET students, matric leavers, graduates and young founders). Answer in plain, short language "
+    "(under 120 words) and give one practical next step. Do not invent dates, rules or fees; if you are "
+    "unsure, say so and tell them to confirm with their college or the official source. Never ask for ID "
+    "numbers, bank details or passwords. The final date to complete a National N Diploma is 30 June 2029."
+)
+
+
+def ask_ai(question, stage):
+    """Returns (answer_text_or_None, status) where status is ok, off, empty or error."""
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not key:
+        return None, "off"
+    prompt = (f"Student stage: {stage}\n" if stage else "") + question
+    body = json.dumps(
+        {
+            "model": ANTHROPIC_MODEL,
+            "max_tokens": 400,
+            "system": AI_SYSTEM,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        ANTHROPIC_URL,
+        data=body,
+        method="POST",
+        headers={"content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=25) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
+        return (text, "ok") if text else (None, "empty")
+    except Exception:
+        return None, "error"
 
 
 # ---------------------------------------------------------------------------
@@ -651,17 +751,29 @@ def clear_profile():
 # Small building blocks for the screens
 # ---------------------------------------------------------------------------
 def card(content):
+    if isinstance(content, ft.Column):
+        content.horizontal_alignment = ft.CrossAxisAlignment.STRETCH
     return ft.Container(content=content, bgcolor=WHITE, border_radius=16, padding=16)
 
 
 def part(title, text, colour):
+    light = colour in (SAND, MINT, "#F2C14E")
     return ft.Container(
         content=ft.Column(
             [
-                ft.Text(title.upper(), size=11, weight=ft.FontWeight.BOLD, color=DEEP),
+                ft.Row(
+                    [
+                        ft.Container(
+                            content=ft.Text(title.upper(), size=11, weight=ft.FontWeight.BOLD, color=DEEP if light else WHITE),
+                            bgcolor=colour,
+                            border_radius=10,
+                            padding=ft.Padding(left=10, right=10, top=3, bottom=3),
+                        )
+                    ]
+                ),
                 ft.Text(text, size=14, color=INK),
             ],
-            spacing=2,
+            spacing=6,
         ),
         bgcolor=SOFT,
         border_radius=10,
@@ -729,6 +841,9 @@ def main(page: ft.Page):
     clipboard = ft.Clipboard()
     page.services.append(clipboard)
 
+    who = {"name": ""}                          # first name from the welcome screen
+    session = {"searches": 0, "scam_checks": 0}  # what the student did this visit
+
     # =====================================================================
     # TOOL 1: LEARN (Jargon Buster)
     # =====================================================================
@@ -793,6 +908,9 @@ def main(page: ft.Page):
                     padding=10,
                 )
             )
+        if key in RESOURCE_FOR:
+            link_text, link_url = RESOURCE_FOR[key]
+            items.append(ft.TextButton(link_text, icon=ft.Icons.OPEN_IN_NEW, url=link_url))
         source = t.get("source", "Source: confirm with your college")
         items.append(ft.Text(f"{source}. Draft. Last checked: {LAST_CHECKED}.", size=11, color=GREY))
         return card(ft.Column(items, spacing=10))
@@ -817,6 +935,7 @@ def main(page: ft.Page):
         if q:
             matches = find_matches(q)
             if matches:
+                session["searches"] += 1
                 for key in matches:
                     record_search(key)
                     result_area.controls.append(term_card(key))
@@ -836,12 +955,14 @@ def main(page: ft.Page):
         refresh_words()
         return ft.Column(
             [
+                scam_banner(),
                 card(ft.Row([search_box, ft.Button("Search", bgcolor=TEAL, color=WHITE, on_click=lambda e: run_search(search_box.value or ""))], spacing=8)),
                 thanks_text,
                 result_area,
                 popular_card,
                 card(ft.Column([ft.Text("Browse by topic", weight=ft.FontWeight.BOLD, color=DEEP), group_row, word_row], spacing=10)),
                 card(ft.Column([ft.Text("Missing a word?", weight=ft.FontWeight.BOLD, color=DEEP), ft.Row([suggest_box, ft.Button("Send", bgcolor=TEAL, color=WHITE, on_click=send_suggestion)], spacing=8)], spacing=8)),
+                ask_card,
                 quiz_card,
                 note("Draft explanations. Always confirm important details with your college."),
             ],
@@ -907,11 +1028,13 @@ def main(page: ft.Page):
     # TOOL 4: TRACKER (built before Request because Request can add to it)
     # =====================================================================
     entries = read_json(TRACKER_FILE, [])
+    for _en in entries:
+        _en["status"] = OLD_STATUS.get(_en.get("status"), _en.get("status", "To contact"))
     tracker_list = ft.Column(spacing=10)
-    org_box = ft.TextField(label="Organisation", expand=True)
+    org_box = ft.TextField(label="Employer or organisation", expand=True)
     contacted_box = ft.TextField(label="Date contacted", hint_text="e.g. 20 Oct", expand=True)
-    follow_box = ft.TextField(label="Follow up on", hint_text="e.g. 27 Oct", expand=True)
-    status_dd = ft.Dropdown(label="Status", value="Planned", options=[ft.DropdownOption(key=s, text=s) for s in STATUSES], expand=True)
+    follow_box = ft.TextField(label="Follow up date (optional)", hint_text="e.g. 27 Oct", expand=True)
+    status_dd = ft.Dropdown(label="Status", value="To contact", options=[ft.DropdownOption(key=s, text=s) for s in STATUSES], expand=True)
     tracker_msg = ft.Text("", color=DEEP, weight=ft.FontWeight.W_600, visible=False)
 
     def save_entries():
@@ -919,7 +1042,7 @@ def main(page: ft.Page):
 
     def next_status(i):
         cur = entries[i]["status"]
-        entries[i]["status"] = STATUSES[(STATUSES.index(cur) + 1) % len(STATUSES)] if cur in STATUSES else "Planned"
+        entries[i]["status"] = STATUSES[(STATUSES.index(cur) + 1) % len(STATUSES)] if cur in STATUSES else "To contact"
         save_entries()
         render_tracker()
         page.update()
@@ -968,10 +1091,10 @@ def main(page: ft.Page):
                 )
             )
         if not cards:
-            cards = [card(ft.Text("No organisations yet. Add one above, or use the example data to see how it works.", color=GREY))]
+            cards = [card(ft.Text("No employers yet. Add one above, or use the example data to see how it works.", color=GREY))]
         tracker_list.controls = cards
 
-    def add_entry(org, contacted="", follow_up="", status="Planned"):
+    def add_entry(org, contacted="", follow_up="", status="To contact"):
         org = (org or "").strip()[:80]
         if not org:
             return False
@@ -980,7 +1103,7 @@ def main(page: ft.Page):
         return True
 
     def on_add_entry(e):
-        if add_entry(org_box.value, contacted_box.value, follow_box.value, status_dd.value or "Planned"):
+        if add_entry(org_box.value, contacted_box.value, follow_box.value, status_dd.value or "To contact"):
             org_box.value = contacted_box.value = follow_box.value = ""
             tracker_msg.value = "Added."
         else:
@@ -1014,12 +1137,12 @@ def main(page: ft.Page):
                 card(
                     ft.Column(
                         [
-                            ft.Text("My organisations", size=20, weight=ft.FontWeight.BOLD, color=DEEP),
-                            ft.Text("Keep track of who you contacted and when to follow up. Use organisation names only, no private details.", color=INK, size=13),
+                            ft.Text("My employers", size=20, weight=ft.FontWeight.BOLD, color=DEEP),
+                            ft.Text("Add an employer and a date to follow up. Tap Next status as you move forward. Organisation names only.", color=INK, size=13),
+                            ft.Text("To contact > Contacted > Follow up due > Replied > Placed", size=12, color=GREY),
                             ft.Row([org_box]),
-                            ft.Row([contacted_box, follow_box], spacing=8),
-                            ft.Row([status_dd]),
-                            ft.Row([ft.Button("Add", bgcolor=TEAL, color=WHITE, on_click=on_add_entry), ft.TextButton("Use example data", on_click=load_demo), ft.TextButton("Clear all", on_click=clear_all)], spacing=8, wrap=True),
+                            ft.Row([follow_box]),
+                            ft.Row([ft.Button("Add employer", bgcolor=TEAL, color=WHITE, on_click=on_add_entry), ft.TextButton("Use example data", on_click=load_demo), ft.TextButton("Clear all", on_click=clear_all)], spacing=8, wrap=True),
                             tracker_msg,
                         ],
                         spacing=8,
@@ -1040,7 +1163,7 @@ def main(page: ft.Page):
     contact_box = ft.TextField(label="Contact person (optional)")
     from_box = ft.TextField(label="Available from", hint_text="e.g. 1 November", expand=True)
     period_box = ft.TextField(label="Period needed", hint_text="e.g. 6 months", expand=True)
-    message_box = ft.TextField(label="Your message", multiline=True, min_lines=10, max_lines=18, read_only=True, visible=False)
+    message_box = ft.TextField(label="Your message", multiline=True, min_lines=12, max_lines=30, text_size=14, read_only=True, visible=False)
     request_msg = ft.Text("", color=DEEP, weight=ft.FontWeight.W_600, visible=False)
     copy_button = ft.Button("Copy message", bgcolor=TEAL, color=WHITE, visible=False)
     track_button = ft.TextButton("Add to my tracker", visible=False)
@@ -1055,13 +1178,13 @@ def main(page: ft.Page):
         start = (from_box.value or "[start date]").strip()
         period = (period_box.value or "[period required by my college]").strip()
         return (
-            f"Subject: Request for workplace placement - {qual}\n\n"
+            f"Subject: Placement request - {qual}\n\n"
             f"{greeting}\n\n"
-            f"My name is {name}. I have completed {qual} at {college}, and I am looking for a workplace "
-            f"placement to complete the practical part of my qualification.\n\n"
-            f"I would be grateful for the opportunity to join {org} for {period}. "
-            f"I am available from {start}, and I have attached my CV.\n\n"
-            f"Thank you for your time and consideration.\n\n"
+            f"My name is {name}. I am studying {qual} at {college}.\n\n"
+            f"I am looking for a workplace placement to complete the practical part of my qualification. "
+            f"I would like to join {org} for {period}, from {start}.\n\n"
+            f"My CV is attached. I would be grateful for the chance to speak with you.\n\n"
+            f"Thank you for your time.\n\n"
             f"Kind regards,\n{name}\n[phone number]\n[email address]"
         )
 
@@ -1084,8 +1207,8 @@ def main(page: ft.Page):
         page.update()
 
     def add_from_request(e):
-        if add_entry(to_org_box.value, "", "", "Planned"):
-            request_msg.value = "Added to your tracker as Planned."
+        if add_entry(to_org_box.value, "", "", "To contact"):
+            request_msg.value = "Added to your tracker (To contact)."
         else:
             request_msg.value = "Type the organisation's name first."
         request_msg.visible = True
@@ -1178,6 +1301,7 @@ def main(page: ft.Page):
         if not text:
             items = [ft.Text("Paste an advert or message first.", color=INK)]
         else:
+            session["scam_checks"] += 1
             hits = scan_advert(text)
             if hits:
                 if len(hits) >= 3:
@@ -1186,16 +1310,41 @@ def main(page: ft.Page):
                     level, colour = "MEDIUM RISK", SAND
                 else:
                     level, colour = "BE CAREFUL", "#F2C14E"
-                items = [ft.Text(f"{level}: {len(hits)} warning sign(s)", size=18, weight=ft.FontWeight.BOLD, color=INK)]
+                items = [
+                    ft.Container(
+                        bgcolor=colour,
+                        border_radius=12,
+                        padding=14,
+                        content=ft.Row(
+                            [
+                                ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=WHITE if colour == RED else DEEP, size=32),
+                                ft.Text(f"{level}: {len(hits)} warning sign(s)", size=20, weight=ft.FontWeight.BOLD, color=WHITE if colour == RED else DEEP, expand=True),
+                            ],
+                            spacing=10,
+                        ),
+                    )
+                ]
                 items += [part(title, advice, colour) for title, advice in hits]
                 items.append(ft.Text("Do not send money, ID or bank details. Ask your college or someone you trust.", size=13, color=INK))
             else:
                 items = [
-                    ft.Text("No common warning signs found", size=18, weight=ft.FontWeight.BOLD, color=INK),
+                    ft.Container(
+                        bgcolor=MINT,
+                        border_radius=12,
+                        padding=14,
+                        content=ft.Row(
+                            [ft.Icon(ft.Icons.CHECK_CIRCLE, color=TEAL, size=32), ft.Text("No common warning signs found", size=18, weight=ft.FontWeight.BOLD, color=DEEP, expand=True)],
+                            spacing=10,
+                        ),
+                    ),
                     ft.Text("That does not prove it is real. Check the company's official website and contact details yourself.", size=13, color=INK),
                 ]
         scam_result.controls.append(card(ft.Column(items, spacing=10)))
         page.update()
+
+    def scam_example(e):
+        scam_box.value = "Earn up to R5000 per week! No experience. Pay a R250 registration fee. WhatsApp only. Limited slots, hurry!"
+        check_advert(e)
 
     def scam_view():
         return ft.Column(
@@ -1203,10 +1352,11 @@ def main(page: ft.Page):
                 card(
                     ft.Column(
                         [
-                            ft.Text("Is this opportunity real?", size=20, weight=ft.FontWeight.BOLD, color=DEEP),
+                            ft.Text("Scam check: is this opportunity real?", size=20, weight=ft.FontWeight.BOLD, color=DEEP),
                             ft.Text("Paste a job advert or WhatsApp message and Karabonia checks it for scam warning signs.", color=INK, size=13),
                             scam_box,
-                            ft.Button("Check it", bgcolor=TEAL, color=WHITE, on_click=check_advert),
+                            ft.Row([ft.Button("Check this advert", bgcolor=TEAL, color=WHITE, height=48, expand=True, on_click=check_advert)]),
+                            ft.Row([ft.TextButton("Try an example", on_click=scam_example)], alignment=ft.MainAxisAlignment.CENTER),
                         ],
                         spacing=8,
                     )
@@ -1229,6 +1379,7 @@ def main(page: ft.Page):
     exp_items = []
     exp_type_dd = ft.Dropdown(label="Type of experience", options=[ft.DropdownOption(key=x, text=x) for x in EXP_TYPES], expand=True)
     exp_text = ft.TextField(label="What did you do?", hint_text="e.g. Sold goods at community events")
+    exp_example = ft.TextField(label="A specific example (optional)", hint_text="e.g. Sold about 200 sweets a week at community events")
     exp_proof = ft.TextField(label="Proof you can show (optional)", hint_text="e.g. signed logbook, reference letter")
     exp_list = ft.Column(spacing=8)
     prof_out = ft.TextField(label="Your profile", multiline=True, min_lines=8, max_lines=16, read_only=True, visible=False)
@@ -1238,7 +1389,7 @@ def main(page: ft.Page):
     def render_exp():
         rows = []
         for i, x in enumerate(exp_items):
-            line = f"{x['type']}: {x['what']}" + (f"  (Proof: {x['proof']})" if x["proof"] else "")
+            line = f"{x['type']}: {x['what']}" + (f". Example: {x['example']}" if x.get("example") else "") + (f"  (Proof: {x['proof']})" if x["proof"] else "")
             rows.append(
                 ft.Row(
                     [
@@ -1259,8 +1410,9 @@ def main(page: ft.Page):
         if not what:
             prof_msg.value = "Type what you did first."
         else:
-            exp_items.append({"type": exp_type_dd.value or "Experience", "what": what, "proof": (exp_proof.value or "").strip()[:80]})
+            exp_items.append({"type": exp_type_dd.value or "Experience", "what": what, "example": (exp_example.value or "").strip()[:140], "proof": (exp_proof.value or "").strip()[:80]})
             exp_text.value = ""
+            exp_example.value = ""
             exp_proof.value = ""
             prof_msg.value = "Added."
         prof_msg.visible = True
@@ -1281,7 +1433,7 @@ def main(page: ft.Page):
         ]
         if exp_items:
             for x in exp_items:
-                lines.append(f"- {x['type']}: {x['what']}" + (f" (Evidence: {x['proof']})" if x["proof"] else ""))
+                lines.append(f"- {x['type']}: {x['what']}" + (f". Example: {x['example']}" if x.get("example") else "") + (f" (Evidence: {x['proof']})" if x["proof"] else ""))
         else:
             lines.append("[add your experience above]")
         lines += ["", "I can provide references and evidence on request."]
@@ -1324,6 +1476,7 @@ def main(page: ft.Page):
                             ft.Text("2. Add your experience", weight=ft.FontWeight.BOLD, color=DEEP),
                             ft.Row([exp_type_dd]),
                             exp_text,
+                            exp_example,
                             exp_proof,
                             ft.Button("Add", bgcolor=TEAL, color=WHITE, on_click=add_exp),
                             exp_list,
@@ -1349,32 +1502,162 @@ def main(page: ft.Page):
         )
 
     # =====================================================================
+    # HOME TAB + SCAM BANNER + tab jumping
+    # =====================================================================
+    def go_tab(i):
+        nav_bar.selected_index = i
+        body.content = ft.Column([views[i]], scroll=ft.ScrollMode.AUTO, expand=True)
+        page.update()
+
+    def scam_banner():
+        return ft.Container(
+            bgcolor=DEEP,
+            border_radius=16,
+            padding=16,
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.SHIELD, color=SAND, size=34),
+                    ft.Column(
+                        [
+                            ft.Text("Got a job advert or WhatsApp message?", size=15, weight=ft.FontWeight.BOLD, color=WHITE),
+                            ft.Text("Check it for scams before you reply or pay.", size=12, color=MINT),
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
+                    ft.Button("Check it", bgcolor=SAND, color=DEEP, on_click=lambda e: go_tab(6)),
+                ],
+                spacing=12,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    def tile(icon, title, idx):
+        return ft.Container(
+            width=150, height=96, bgcolor=MINT, border_radius=16, padding=12,
+            on_click=lambda e, i=idx: go_tab(i),
+            content=ft.Column([ft.Icon(icon, color=TEAL, size=26), ft.Text(title, size=14, weight=ft.FontWeight.W_600, color=DEEP)], spacing=6),
+        )
+
+    def home_view():
+        return ft.Column(
+            [
+                scam_banner(),
+                card(
+                    ft.Column(
+                        [
+                            ft.Text("What would you like to do?", size=20, weight=ft.FontWeight.BOLD, color=DEEP),
+                            ft.Row(
+                                [
+                                    tile(ft.Icons.MENU_BOOK, "Learn a word", 1),
+                                    tile(ft.Icons.ROUTE, "Find my next step", 2),
+                                    tile(ft.Icons.EDIT_NOTE, "Write a request", 3),
+                                    tile(ft.Icons.ASSIGNMENT, "Track employers", 4),
+                                    tile(ft.Icons.CHECKLIST, "Check my readiness", 5),
+                                    tile(ft.Icons.BADGE, "Build my profile", 7),
+                                ],
+                                wrap=True, spacing=10, run_spacing=10,
+                            ),
+                            ft.Row([ft.TextButton("Back to the welcome page", on_click=lambda e: show_welcome())], alignment=ft.MainAxisAlignment.CENTER),
+                        ],
+                        spacing=12,
+                    )
+                ),
+                card(
+                    ft.Column(
+                        [ft.Text("Useful links", size=18, weight=ft.FontWeight.BOLD, color=DEEP)]
+                        + [
+                            ft.Column(
+                                [ft.TextButton(f"{title}", icon=ft.Icons.OPEN_IN_NEW, url=url), ft.Text(desc, size=12, color=GREY)],
+                                spacing=0,
+                            )
+                            for title, desc, url in RESOURCES
+                        ],
+                        spacing=6,
+                    )
+                ),
+                note("Karabonia: your path from study to work."),
+            ],
+            spacing=12,
+        )
+
+    # =====================================================================
+    # ASK KARABONIA (optional AI helper, top of the quiz area in the Learn tab)
+    # =====================================================================
+    ai_box = ft.TextField(label="Ask Karabonia about study or work", multiline=True, min_lines=2, max_lines=4, border_radius=14)
+    ai_answer = ft.Column(spacing=10)
+
+    async def on_ask(e):
+        q = (ai_box.value or "").strip()[:300]
+        if not q:
+            return
+        ai_answer.controls = [ft.Text("Thinking...", color=GREY)]
+        page.update()
+        text, status = await asyncio.to_thread(ask_ai, q, stage_dropdown.value or "")
+        if text:
+            ai_answer.controls = [part("Karabonia says", text, PLUM), note("AI-generated. Check important details with your college.")]
+        else:
+            why = {
+                "off": "The AI helper is switched off, so here is the Jargon Buster instead.",
+                "error": "Could not reach the AI helper. Check your internet. Here is the Jargon Buster instead.",
+            }.get(status, "No answer came back. Here is the Jargon Buster instead.")
+            found = find_matches(q.lower())
+            ai_answer.controls = [ft.Text(why, size=13, color=GREY)] + (
+                [term_card(found[0])] if found else [ft.Text("Try a single word, like logbook or learnership.", size=13, color=INK)]
+            )
+        page.update()
+
+    ask_card = card(
+        ft.Column(
+            [
+                ft.Text("Ask Karabonia", size=18, weight=ft.FontWeight.BOLD, color=DEEP),
+                ft.Text("Optional AI helper. Never type your ID number or private details.", size=12, color=GREY),
+                ai_box,
+                ft.Button("Ask", bgcolor=PLUM, color=WHITE, on_click=on_ask),
+                ai_answer,
+            ],
+            spacing=8,
+        )
+    )
+
+    # =====================================================================
     # JARGON QUIZ (bottom of the Learn tab)
     # =====================================================================
     quiz = {"score": 0, "n": 0, "answer": ""}
     quiz_q = ft.Text("", size=16, weight=ft.FontWeight.BOLD, color=INK)
     quiz_opts = ft.Column(spacing=8)
-    quiz_fb = ft.Text("", size=14, color=INK)
+    quiz_fb = ft.Column(spacing=8)
     quiz_score = ft.Text("Score: 0 / 0", color=DEEP, weight=ft.FontWeight.W_600)
 
     def pick(o):
         quiz["n"] += 1
-        if o == quiz["answer"]:
+        ans = quiz["answer"]
+        t = TERMS[ans]
+        good = (o == ans)
+        if good:
             quiz["score"] += 1
-            quiz_fb.value = "Correct! " + TERMS[o]["matters"]
-        else:
-            quiz_fb.value = f"Not quite. It is {quiz['answer'].title()}. " + TERMS[quiz["answer"]]["matters"]
+        head = "Correct!" if good else f"Not quite. The answer is {ans.title()}."
+        items = [ft.Text(head, size=16, weight=ft.FontWeight.BOLD, color=TEAL if good else RED)]
+        if not good:
+            items.append(part(f"You picked: {o.title()}", TERMS[o]["means"], SAND))
+        items += [
+            part("What it means", t["means"], TEAL),
+            part("Why it matters", t["matters"], PLUM),
+            part("What to do next", t["next"], "#4A90B8"),
+        ]
+        quiz_fb.controls = items
         quiz_score.value = f"Score: {quiz['score']} / {quiz['n']}"
         quiz_opts.controls = []
         page.update()
 
     def next_question(e=None):
-        key = random.choice(list(TERMS))
-        options = [key] + random.sample([k for k in TERMS if k != key], 2)
+        question, answer = random.choice(QUIZ_ITEMS)
+        others = [a for _, a in QUIZ_ITEMS if a != answer]
+        options = [answer] + random.sample(others, 2)
         random.shuffle(options)
-        quiz["answer"] = key
-        quiz_q.value = "Which term means: " + TERMS[key]["means"]
-        quiz_fb.value = ""
+        quiz["answer"] = answer
+        quiz_q.value = question
+        quiz_fb.controls = []
         quiz_opts.controls = [
             ft.Button(o.title(), bgcolor=MINT, color=DEEP, on_click=lambda e, o=o: pick(o)) for o in options
         ]
@@ -1386,6 +1669,7 @@ def main(page: ft.Page):
         ft.Column(
             [
                 ft.Text("Test yourself", weight=ft.FontWeight.BOLD, color=DEEP),
+                ft.Text("Which word fits this?", size=12, color=GREY),
                 quiz_q, quiz_opts, quiz_fb,
                 ft.Row([quiz_score, ft.TextButton("Next question", on_click=next_question)], spacing=12),
             ],
@@ -1407,6 +1691,12 @@ def main(page: ft.Page):
         "I'm studying at a college or university": "Understand your requirements early and plan your workplace training.",
         "I have a qualification but need experience or work": "Understand logbooks and workplace requirements, explore entry-level roles, find your skills gaps.",
         "I want to create my own opportunity": "Explore small-business ideas and practical skills that can earn an income.",
+    }
+    PERSONA_MOTIVATION = {
+        "I've just finished matric": "Not knowing yet is normal. Every path starts with one small step, and you can take yours today.",
+        "I'm studying at a college or university": "Starting early is the smartest move. Understand your requirements now and your future self will thank you.",
+        "I have a qualification but need experience or work": "Your qualification already proves you can finish what you start. Experience is the next step, and you can start building it now.",
+        "I want to create my own opportunity": "Creating your own opportunity takes courage. Small first steps, tested with real people, add up to real income.",
     }
     BLOCKERS = {
         "I don't know my options": (
@@ -1450,10 +1740,13 @@ def main(page: ft.Page):
             return
         title, step, where = BLOCKERS[b]
         diag_result.controls = [
-            part("Your focus", PERSONA_FOCUS[p], TEAL),
-            part("What is stopping you", title, SAND),
+            ft.Text("You are closer than you think", size=18, weight=ft.FontWeight.BOLD, color=DEEP),
+            part("You've got this", PERSONA_MOTIVATION[p], TEAL),
+            part("Your focus", PERSONA_FOCUS[p], PLUM),
+            part("What is in the way", title, SAND),
             part("Your next practical step", step, PLUM),
             part("Where to go in Karabonia", where, "#4A90B8"),
+            ft.Text("Karabonia's goal: shorten the distance between you and meaningful income.", size=12, color=GREY),
         ]
         stage_dropdown.value = PERSONAS[p]
         apply_stage(PERSONAS[p])   # fills the checklist below
@@ -1461,8 +1754,8 @@ def main(page: ft.Page):
     diag_card = card(
         ft.Column(
             [
-                ft.Text("What is stopping you?", size=20, weight=ft.FontWeight.BOLD, color=DEEP),
-                ft.Text("Answer two questions and get one practical next step.", color=INK, size=13),
+                ft.Text("Your challenge, your plan", size=20, weight=ft.FontWeight.BOLD, color=DEEP),
+                ft.Text("Tell us where you are and what is in the way. We turn it into one practical step toward meaningful income.", color=INK, size=13),
                 ft.Row([diag_persona]),
                 ft.Row([diag_block]),
                 ft.Button("Find my next step", bgcolor=PLUM, color=WHITE, on_click=run_diag),
@@ -1478,26 +1771,36 @@ def main(page: ft.Page):
     greeting_text = ft.Text("", size=14, weight=ft.FontWeight.BOLD, color=WHITE)
 
     header = ft.Container(
-        content=ft.Column(
+        content=ft.Row(
             [
-                ft.Row(
-                    [ft.Icon(ft.Icons.LOCAL_FLORIST, color=WHITE, size=28), ft.Text("Karabonia", size=30, weight=ft.FontWeight.BOLD, color=WHITE)],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=8,
+                ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=WHITE, tooltip="Back to welcome", on_click=lambda e: show_welcome()),
+                ft.Column(
+                    [
+                        ft.Container(
+                            on_click=lambda e: show_welcome(),
+                            tooltip="Back to the welcome page",
+                            content=ft.Row(
+                                [ft.Icon(ft.Icons.LOCAL_FLORIST, color=WHITE, size=26), ft.Text("Karabonia", size=28, weight=ft.FontWeight.BOLD, color=WHITE)],
+                                alignment=ft.MainAxisAlignment.CENTER,
+                                spacing=8,
+                            ),
+                        ),
+                        ft.Text("Your path from study to work", size=13, color=MINT),
+                        greeting_text,
+                    ],
+                    spacing=0,
+                    expand=True,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                ft.Text("Your path from study to work", size=13, color=MINT),
-                greeting_text,
-                ft.TextButton("Switch user", on_click=lambda e: show_welcome(), style=ft.ButtonStyle(color=MINT)),
+                ft.TextButton("Finish", on_click=lambda e: show_goodbye(), style=ft.ButtonStyle(color=WHITE)),
             ],
-            spacing=0,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        padding=ft.Padding(left=16, right=16, top=18, bottom=6),
-        alignment=ft.Alignment.CENTER,
+        padding=ft.Padding(left=4, right=4, top=14, bottom=10),
         gradient=ft.LinearGradient(begin=ft.Alignment.TOP_LEFT, end=ft.Alignment.BOTTOM_RIGHT, colors=[DEEP, TEAL, PLUM]),
     )
 
-    views = [learn_view(), path_view(), request_view(), tracker_view(), ready_view(), scam_view(), skills_view()]
+    views = [home_view(), learn_view(), path_view(), request_view(), tracker_view(), ready_view(), scam_view(), skills_view()]
     body = ft.Container(content=ft.Column([views[0]], scroll=ft.ScrollMode.AUTO, expand=True), expand=True, padding=16)
 
     def on_nav(e):
@@ -1506,6 +1809,7 @@ def main(page: ft.Page):
 
     page.navigation_bar = ft.NavigationBar(
         destinations=[
+            ft.NavigationBarDestination(icon=ft.Icons.HOME, label="Home"),
             ft.NavigationBarDestination(icon=ft.Icons.MENU_BOOK, label="Learn"),
             ft.NavigationBarDestination(icon=ft.Icons.ROUTE, label="Path"),
             ft.NavigationBarDestination(icon=ft.Icons.EDIT_NOTE, label="Request"),
@@ -1527,6 +1831,7 @@ def main(page: ft.Page):
     def show_main(profile):
         name = (profile.get("name") or "").strip()
         stage = profile.get("stage") or ""
+        who["name"] = name
         greeting_text.value = f"Welcome, {name}!" if name else "Welcome, guest!"
         if name:
             name_box.value = name          # pre-fill the Request form
@@ -1586,7 +1891,16 @@ def main(page: ft.Page):
                     blob(36, 36, right=70, top=24, opacity=0.35),
                     blob(22, 22, left=110, top=70, opacity=0.30, colour=SAND),
                     ft.Container(
-                        left=0, right=0, top=44,
+                        left=16, top=14,
+                        on_click=lambda e: show_welcome(),
+                        tooltip="Karabonia home",
+                        content=ft.Row(
+                            [ft.Icon(ft.Icons.LOCAL_FLORIST, color=WHITE, size=22), ft.Text("Karabonia", size=18, weight=ft.FontWeight.BOLD, color=WHITE)],
+                            spacing=6,
+                        ),
+                    ),
+                    ft.Container(
+                        left=0, right=0, top=56,
                         content=ft.Column(
                             [
                                 art,
@@ -1642,11 +1956,202 @@ def main(page: ft.Page):
             ),
         )
 
+        value_box = ft.Container(
+            padding=ft.Padding(left=16, right=16, top=16, bottom=0),
+            content=card(part("What makes Karabonia different", WELCOME_VALUE, PLUM)),
+        )
+
         page.clean()
         page.navigation_bar = None
         page.add(
             ft.Column(
-                [hero, form, gives],
+                [hero, value_box, form, gives],
+                spacing=0,
+                scroll=ft.ScrollMode.AUTO,
+                expand=True,
+                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+            )
+        )
+        page.update()
+
+    # =====================================================================
+    # GOODBYE SCREEN: thanks, a summary of what the student did, and feedback
+    # =====================================================================
+    def show_goodbye():
+        name = who["name"]
+        done_path = sum(1 for b in path_boxes if b.value)
+        ready_score = sum(1 for b in ready_boxes if b.value)
+        n_skills = sum(1 for b in skill_boxes if b.value)
+        did, todo = [], []
+        if session["searches"]:
+            did.append(f"Looked up {session['searches']} word(s) in the Jargon Buster")
+        else:
+            todo.append("Search a word in Learn, like 'logbook'")
+        if quiz["n"]:
+            did.append(f"Got {quiz['score']} of {quiz['n']} quiz questions right")
+        if path_boxes:
+            did.append(f"Ticked {done_path} of {len(path_boxes)} steps on your path")
+        else:
+            todo.append("Pick where you are in Path to get your steps")
+        if entries:
+            did.append(f"Tracking {len(entries)} organisation(s)")
+        if ready_score:
+            did.append(f"Scored {ready_score} of {len(READINESS)} on the readiness check")
+        else:
+            todo.append("Take the Ready check")
+        if session["scam_checks"]:
+            did.append(f"Checked {session['scam_checks']} advert(s) for scams")
+        else:
+            todo.append("Paste an advert into Scam? to test it")
+        if n_skills or exp_items:
+            did.append(f"Built a profile with {n_skills} skill(s) and {len(exp_items)} experience(s)")
+        else:
+            todo.append("Build your skills profile")
+
+        missing = [tip for (q, tip), b in zip(READINESS, ready_boxes) if not b.value]
+        if ready_score and missing:
+            next_step = missing[0]
+        elif todo:
+            next_step = todo[0]
+        else:
+            next_step = "Start applying, and track every message in the Tracker tab."
+
+        def blob(w, h, left=None, top=None, right=None, bottom=None, opacity=0.18, colour=WHITE):
+            return ft.Container(
+                width=w, height=h, left=left, top=top, right=right, bottom=bottom,
+                bgcolor=ft.Colors.with_opacity(opacity, colour), border_radius=max(w, h),
+            )
+
+        hero = ft.Container(
+            height=270,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            border_radius=ft.BorderRadius(top_left=0, top_right=0, bottom_left=56, bottom_right=56),
+            gradient=ft.LinearGradient(begin=ft.Alignment.TOP_LEFT, end=ft.Alignment.BOTTOM_RIGHT, colors=[PLUM, TEAL, SAND]),
+            content=ft.Stack(
+                [
+                    blob(200, 200, left=-60, top=-50, opacity=0.14),
+                    blob(120, 120, right=-30, top=20, opacity=0.18, colour=DEEP),
+                    blob(80, 80, left=24, bottom=30, opacity=0.20, colour=MINT),
+                    blob(30, 30, right=60, bottom=50, opacity=0.35),
+                    ft.Container(
+                        left=16, top=14,
+                        on_click=lambda e: show_welcome(),
+                        tooltip="Karabonia home",
+                        content=ft.Row(
+                            [ft.Icon(ft.Icons.LOCAL_FLORIST, color=WHITE, size=22), ft.Text("Karabonia", size=18, weight=ft.FontWeight.BOLD, color=WHITE)],
+                            spacing=6,
+                        ),
+                    ),
+                    ft.Container(
+                        left=24, right=24, top=56,
+                        content=ft.Column(
+                            [
+                                ft.Icon(ft.Icons.LOCAL_FLORIST, color=WHITE, size=56),
+                                ft.Text(f"Thank you, {name}!" if name else "Thank you!", size=34, weight=ft.FontWeight.BOLD, color=WHITE, text_align=ft.TextAlign.CENTER),
+                                ft.Text(GOODBYE_TEXT, size=14, color=WHITE, text_align=ft.TextAlign.CENTER),
+                            ],
+                            spacing=6,
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                    ),
+                ]
+            ),
+        )
+
+        def line(icon, colour, text):
+            return ft.Row(
+                [ft.Icon(icon, color=colour, size=20), ft.Text(text, size=14, color=INK, expand=True)],
+                spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+            )
+
+        summary_items = [ft.Text("What you did today", size=18, weight=ft.FontWeight.BOLD, color=DEEP)]
+        summary_items += [line(ft.Icons.CHECK_CIRCLE, TEAL, t) for t in did] or [ft.Text("You have just started. That is a good first step.", size=14, color=INK)]
+        summary = ft.Container(
+            padding=ft.Padding(left=16, right=16, top=20, bottom=0),
+            content=card(
+                ft.Column(
+                    summary_items
+                    + [part("Your next step", next_step, PLUM)]
+                    + ([ft.Text("Still to try: " + ", ".join(todo[:3]), size=13, color=GREY)] if todo else []),
+                    spacing=10,
+                )
+            ),
+        )
+
+        fb_state = {"rating": ""}
+        fb_chips = ft.Row(wrap=True, spacing=8, run_spacing=8)
+        fb_text = ft.TextField(label="Anything we should improve? (optional)", multiline=True, min_lines=2, max_lines=4, border_radius=14)
+        fb_msg = ft.Text("", color=DEEP, weight=ft.FontWeight.W_600, visible=False)
+
+        def draw_chips():
+            fb_chips.controls = [
+                chip(x, lambda e, x=x: pick_rating(x), MINT, selected=(fb_state["rating"] == x))
+                for x in ["Loved it", "Good", "Okay", "Needs work"]
+            ]
+
+        def pick_rating(x):
+            fb_state["rating"] = x
+            draw_chips()
+            page.update()
+
+        draw_chips()
+
+        def send_feedback(e):
+            if not fb_state["rating"]:
+                fb_msg.value = "Please tap how it was first."
+            else:
+                note_text = (fb_text.value or "").strip()[:300].replace("\n", " ")
+                with open(FEEDBACK_FILE, "a", encoding="utf-8") as f:
+                    f.write(f"{fb_state['rating']} | {note_text}\n")
+                fb_msg.value = "Thank you! Your feedback helps make Karabonia better."
+                fb_state["rating"] = ""
+                fb_text.value = ""
+                draw_chips()
+            fb_msg.visible = True
+            page.update()
+
+        feedback = ft.Container(
+            padding=ft.Padding(left=16, right=16, top=4, bottom=0),
+            content=card(
+                ft.Column(
+                    [
+                        ft.Text("How was Karabonia?", size=18, weight=ft.FontWeight.BOLD, color=DEEP),
+                        ft.Text("Tap one. It takes 10 seconds and is anonymous.", size=12, color=GREY),
+                        fb_chips,
+                        fb_text,
+                        ft.Button("Send feedback", bgcolor=PLUM, color=WHITE, height=46, on_click=send_feedback),
+                        fb_msg,
+                    ],
+                    spacing=10,
+                )
+            ),
+        )
+
+        def keep_exploring(e):
+            page.clean()
+            page.navigation_bar = nav_bar
+            page.add(main_layout)
+            page.update()
+
+        actions = ft.Container(
+            padding=ft.Padding(left=16, right=16, top=4, bottom=24),
+            content=ft.Row(
+                [
+                    ft.Button("Keep exploring", bgcolor=TEAL, color=WHITE, on_click=keep_exploring),
+                    ft.TextButton("Back to the start", on_click=lambda e: show_welcome()),
+                ],
+                spacing=8,
+                wrap=True,
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
+        )
+
+        page.clean()
+        page.navigation_bar = None
+        page.add(
+            ft.Column(
+                [hero, summary, feedback, actions],
                 spacing=0,
                 scroll=ft.ScrollMode.AUTO,
                 expand=True,
