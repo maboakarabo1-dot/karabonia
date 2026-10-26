@@ -1,4 +1,0 @@
-seta
-book
-report
-book of file
